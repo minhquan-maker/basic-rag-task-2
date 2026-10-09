@@ -1,0 +1,10 @@
+{"id": "q1", "hops": 1, "question": "Giải Turing do tổ chức nào trao?", "gold_sources": ["acm.md"], "answer_contains": ["ACM"]}
+{"id": "q2", "hops": 1, "question": "Yann LeCun nổi tiếng với kiến trúc mạng nào?", "gold_sources": ["lecun.md"], "answer_contains": ["tích chập"]}
+{"id": "q3", "hops": 1, "question": "Ai sáng lập Mila?", "gold_sources": ["bengio.md"], "answer_contains": ["Bengio"]}
+{"id": "q4", "hops": 2, "question": "Công ty nào đã mua lại tổ chức tạo ra AlphaGo?", "gold_sources": ["alphago.md", "deepmind.md"], "answer_contains": ["Google"]}
+{"id": "q5", "hops": 2, "question": "Tổ chức nào trao giải thưởng mang tên người từng dẫn dắt việc giải mã Enigma?", "gold_sources": ["turing.md", "acm.md"], "answer_contains": ["ACM"]}
+{"id": "q6", "hops": 2, "question": "Viện nào trao giải Nobel mà Geoffrey Hinton nhận năm 2024?", "gold_sources": ["hinton.md", "nobel.md"], "answer_contains": ["Hoàng gia Thụy Điển"]}
+{"id": "q7", "hops": 2, "question": "Người nhận Giải Turing 2018 từng làm việc ở công ty đã mua lại DeepMind là ai?", "gold_sources": ["hinton.md", "deepmind.md"], "answer_contains": ["Hinton"]}
+{"id": "q8", "hops": 2, "question": "Trong ba người nhận Giải Turing 2018, những ai sinh ra ở Pháp?", "gold_sources": ["hinton.md", "lecun.md", "bengio.md"], "answer_contains": ["LeCun", "Bengio"]}
+{"id": "q9", "hops": 3, "question": "Giám đốc điều hành của tổ chức đã phát triển AlphaGo sinh ra ở thành phố nào?", "gold_sources": ["alphago.md", "deepmind.md", "hassabis.md"], "answer_contains": ["Luân Đôn"]}
+{"id": "q10", "hops": 2, "question": "Tổ chức trao giải mang tên người giải mã Enigma được thành lập năm nào?", "gold_sources": ["turing.md", "acm.md"], "answer_contains": ["1947"]}
