@@ -3,7 +3,7 @@
 Hai pipeline hỏi đáp trên cùng một bộ tài liệu, để so sánh trực tiếp:
 
 - **Vector RAG**: chia đoạn → embedding → ChromaDB → lấy top-k đoạn gần câu hỏi → LLM trả lời.
-- **KG-RAG**: LLM trích bộ ba (chủ thể, quan hệ, đối tượng) từ từng đoạn → đồ thị tri thức (NetworkX) → tìm thực thể trong câu hỏi → lấy đồ thị con quanh các thực thể đó, kèm đoạn văn gốc → LLM trả lời.
+- **KG-RAG**: LLM trích bộ ba (chủ thể, quan hệ, đối tượng) từ từng đoạn → đồ thị tri thức (NetworkX) → tìm thực thể trong câu hỏi → lấy đồ thị con quanh các thực thể đó, kèm đoạn văn gốc → LLM trả về câu trả lời.
 
 Không dùng LangChain hay LlamaIndex: mỗi thành phần được viết tay trên thư viện nền để thấy nó làm gì. LLM và embedding hiện dùng Gemini; hai giao diện `LLM` và `Embedder` (`ragkg/protocols.py`) nhỏ nên thay provider chỉ cần viết thêm một lớp.
 
