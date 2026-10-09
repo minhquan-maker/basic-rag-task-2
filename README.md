@@ -1,100 +1,92 @@
-# RAG cơ bản & KG-RAG cơ bản
+# ragkg: Vector RAG và KG-RAG cơ bản
 
-Hai chương trình hỏi đáp trên tài liệu `.txt/.md`, cùng dùng Gemini làm LLM + embedding, cài đặt trực tiếp trên các thư viện nền tảng (không dùng LangChain/LlamaIndex) để thấy rõ từng thành phần.
+Hai pipeline hỏi đáp trên cùng một bộ tài liệu, để so sánh trực tiếp:
 
-| | RAG thường (vector RAG) | KG-RAG |
-|---|---|---|
-| Index | chunk → embedding → ChromaDB | chunk → LLM trích bộ ba → Knowledge Graph (NetworkX) |
-| Truy hồi | embedding câu hỏi → top-k đoạn gần nhất | tìm thực thể trong câu hỏi → đồ thị con k-hop |
-| Mạnh ở | câu hỏi tra cứu một đoạn | câu hỏi cần **nối nhiều tài liệu** (multi-hop) |
+- **Vector RAG**: chia đoạn → embedding → ChromaDB → lấy top-k đoạn gần câu hỏi → LLM trả lời.
+- **KG-RAG**: LLM trích bộ ba (chủ thể, quan hệ, đối tượng) từ từng đoạn → đồ thị tri thức (NetworkX) → tìm thực thể trong câu hỏi → lấy đồ thị con quanh các thực thể đó, kèm đoạn văn gốc → LLM trả lời.
 
-## Kiến trúc
+Không dùng LangChain hay LlamaIndex: mỗi thành phần được viết tay trên thư viện nền để thấy nó làm gì. LLM và embedding hiện dùng Gemini; hai giao diện `LLM` và `Embedder` (`ragkg/protocols.py`) nhỏ nên thay provider chỉ cần viết thêm một lớp.
 
+Khi nào KG-RAG đáng dùng: câu hỏi cần **nối thông tin nằm ở nhiều tài liệu** ("giám đốc của tổ chức tạo ra AlphaGo sinh ở đâu?"). Vector RAG hay lấy được đoạn gần chủ đề nhưng thiếu mắt xích giữa chừng. Với câu hỏi tra cứu trong một đoạn thì vector RAG đủ tốt và rẻ hơn nhiều, vì KG-RAG phải gọi LLM cho mỗi đoạn lúc index.
+
+## Chạy thử
+
+Cần Python ≥ 3.10 và một Gemini API key (https://aistudio.google.com/apikey).
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env            # điền GEMINI_API_KEY
+
+ragkg index                                       # vector index + knowledge graph
+ragkg ask "Công ty nào đã mua lại tổ chức tạo ra AlphaGo?"
+ragkg ask "..." --mode kg --no-answer             # chỉ xem phần truy hồi, không gọi LLM sinh câu trả lời
+ragkg chat
+ragkg graph                                       # in bộ ba, xuất storage/kg.html
+ragkg eval                                        # so sánh hai pipeline trên eval/questions.jsonl
+pytest                                            # 21 test, không cần key
 ```
-RAG thường
-  Index:  tài liệu ─► chunking ─► embedding ─► ChromaDB (HNSW, cosine)
-  Hỏi:    câu hỏi ─► embedding ─► top-k đoạn ─► prompt ─► Gemini ─► trả lời
 
-KG-RAG
-  Index:  tài liệu ─► chunking ─► Gemini trích (head, relation, tail) dạng JSON
-                    ─► gộp thực thể trùng tên ─► NetworkX MultiDiGraph ─► kg.json
-                    └► embedding tên thực thể ─► ChromaDB
-  Hỏi:    câu hỏi ─► liên kết thực thể (khớp tên / LLM + embedding)
-                  ─► BFS k-hop ─► bộ ba (+ đoạn văn gốc) ─► Gemini ─► trả lời
-```
+`data/` chứa 9 tài liệu ngắn về các nhà nghiên cứu AI (Turing, Hinton, LeCun, Bengio, DeepMind, ...). Muốn dùng tài liệu riêng thì bỏ file `.txt/.md` vào `data/` (dòng đầu `# Tiêu đề` là tiêu đề tài liệu) rồi `ragkg index`.
 
 ## Cấu trúc
 
 ```
-main.py               CLI: index / ask / chat / graph
-src/config.py         cấu hình (đọc từ .env)
-src/llm.py            wrapper Gemini: generate, generate_json, embed (có retry 429/5xx)
-src/documents.py      đọc file, chia đoạn theo câu có overlap
-src/prompts.py        toàn bộ prompt
-src/vector_rag.py     pipeline RAG thường
-src/kg_builder.py     KnowledgeGraph (NetworkX) + trích bộ ba bằng LLM
-src/kg_rag.py         pipeline KG-RAG: liên kết thực thể, đồ thị con, trả lời
-src/visualize.py      xuất đồ thị ra HTML tương tác (pyvis)
-data/                 5 tài liệu mẫu (tiếng Việt)
-tests/test_offline.py test không cần API key (FakeLLM)
-storage/              sinh khi chạy: chroma/, kg.json, chunks.json, kg.html
+ragkg/
+  config.py        Settings, đọc từ .env
+  models.py        Chunk, Hit; schema Pydantic cho structured output (Triple, Extraction, Mentions)
+  protocols.py     giao diện LLM / Embedder
+  providers/gemini.py
+  corpus.py        đọc file, chia đoạn theo câu có overlap
+  store.py         bọc ChromaDB; sync tăng dần theo hash nội dung
+  vector_rag.py    pipeline 1
+  graph.py         KnowledgeGraph (MultiDiGraph), chuẩn hóa tên, gộp đỉnh
+  resolve.py       gộp tên viết tắt vào tên đầy đủ
+  extract.py       trích bộ ba bằng LLM, có cache
+  graph_rag.py     pipeline 2: liên kết thực thể, mở rộng đồ thị con, trả lời
+  evaluate.py      đo recall nguồn và độ đúng câu trả lời
+  viz.py, cli.py
+data/  eval/questions.jsonl  tests/
 ```
 
-## Thư viện và vai trò
+## Thư viện
 
-| Thư viện | Vai trò |
+| Thư viện | Dùng để |
 |---|---|
-| `google-genai` | SDK Gemini: sinh văn bản/JSON và tạo embedding |
-| `chromadb` | Vector DB (HNSW, lưu đĩa) cho đoạn văn và tên thực thể |
-| `networkx` | Lưu và duyệt Knowledge Graph |
-| `pyvis` | Vẽ đồ thị ra HTML |
-| `python-dotenv` | Đọc API key/cấu hình từ `.env` |
-| `pytest` | Test |
+| `google-genai` | sinh văn bản, structured output, embedding |
+| `pydantic` | schema cho kết quả trích xuất; Gemini ép đầu ra theo schema nên không phải tự parse JSON |
+| `chromadb` | vector DB (HNSW, cosine), lưu đĩa |
+| `networkx` | cấu trúc đồ thị và duyệt BFS |
+| `pyvis` | xem đồ thị trong trình duyệt |
+| `python-dotenv`, `pytest` | cấu hình, test |
 
-## Cài đặt và chạy
+## Một số quyết định thiết kế
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env        # điền GEMINI_API_KEY (lấy tại https://aistudio.google.com/apikey)
+- **Index tăng dần.** Mỗi đoạn lưu hash nội dung (kèm tên model embedding và số chiều); `ragkg index` lần sau chỉ embed đoạn mới hoặc đã sửa và xóa đoạn đã biến mất. Kết quả trích bộ ba được cache theo hash đoạn + model + phiên bản prompt, nên sửa một file chỉ tốn lời gọi LLM cho đoạn đổi. `--fresh` bỏ cache.
+- **Tiêu đề đi cùng đoạn.** Tiêu đề tài liệu được ghép vào văn bản khi embedding và đưa vào prompt trích xuất, để đoạn chỉ viết "Ông ..." vẫn gắn đúng chủ thể.
+- **Chuẩn hóa tiếng Việt.** Khóa thực thể qua NFC + casefold, vì cùng một chữ có dấu có thể được mã hóa dựng sẵn hoặc dấu rời, và hai dạng đó không bằng nhau khi so chuỗi.
+- **Liên kết thực thể 3 tầng** (`GraphRAG.link`): tên/bí danh xuất hiện nguyên văn (ưu tiên cụm dài, nên "Giải Turing" không bị khớp nhầm thành "Alan Turing"); rồi các cụm LLM tách ra khớp chính xác; cuối cùng mới tới embedding với ngưỡng cosine.
+- **Gộp tên viết tắt** (`resolve.py`): "Hinton" gộp vào "Geoffrey Hinton" khi là ứng viên duy nhất và loại thực thể không mâu thuẫn. Có chủ đích bỏ qua trường hợp mơ hồ ("Turing" có thể là người hoặc giải thưởng).
+- **Mở rộng đồ thị con có kiểm soát.** BFS hai chiều tới `KG_HOPS` bước; đỉnh có hơn `KG_HUB_LIMIT` cạnh không được mở rộng tiếp, để một đỉnh phổ biến không kéo cả đồ thị vào prompt. Cạnh gần gốc và có nhiều bằng chứng được xếp trước khi cắt theo `KG_MAX_FACTS`.
+- **Đưa cả đoạn văn gốc** của các bộ ba vào prompt, không chỉ bộ ba, vì bộ ba làm mất sắc thái và chi tiết. Mỗi sự kiện vẫn truy ngược được về đoạn nguồn.
 
-python main.py index                                   # xây vector index + KG
-python main.py ask "Einstein sinh ra ở quốc gia nào?"  # so sánh RAG thường và KG-RAG
-python main.py ask "..." --mode kg                     # rag | kg | both
-python main.py chat                                    # hỏi đáp liên tục
-python main.py graph                                   # in bộ ba, xuất storage/kg.html
-```
+## Đánh giá
 
-Muốn dùng tài liệu riêng: bỏ file `.txt/.md` vào `data/` rồi chạy lại `python main.py index`.
+`ragkg eval` chạy 10 câu trong `eval/questions.jsonl` (1, 2 và 3 tài liệu cần ghép) qua cả hai pipeline và in theo nhóm:
 
-Câu hỏi mẫu cần ghép thông tin từ nhiều file:
+- **recall nguồn**: tỉ lệ file cần thiết có trong phần truy hồi của pipeline. Không cần LLM chấm.
+- **đúng**: câu trả lời có chứa các cụm đáp án (so khớp chuỗi, không phân biệt hoa thường).
 
-- Einstein sinh ra ở quốc gia nào? *(einstein → ulm)*
-- Thành phố nơi Marie Curie sinh ra nằm bên con sông nào? *(marie_curie → warszawa)*
-- Tổ chức nào trao giải Nobel Vật lý mà Einstein nhận năm 1921? *(einstein → nobel)*
+Bộ 10 câu này chỉ đủ để thấy xu hướng, không đủ để kết luận thống kê. Chưa có kết quả công bố trong repo vì chưa chạy với Gemini thật khi viết README này; hãy chạy `ragkg eval` và xem `storage/eval.json`.
 
-## Các tham số chính (`.env`)
+## Hạn chế
 
-| Biến | Ý nghĩa |
-|---|---|
-| `CHUNK_SIZE` / `CHUNK_OVERLAP` | độ dài đoạn / phần chồng lấn (ký tự) |
-| `TOP_K` | số đoạn lấy về của RAG thường |
-| `KG_HOPS` / `KG_MAX_TRIPLES` | độ sâu BFS / số bộ ba tối đa đưa vào prompt |
-| `KG_WITH_CHUNKS` | đính kèm đoạn văn gốc của các bộ ba vào prompt (tránh mất chi tiết) |
-| `ENTITY_MATCH_THRESHOLD` | ngưỡng cosine để khớp "Einstein" với đỉnh "Albert Einstein" |
-| `REQUEST_DELAY` | giây nghỉ giữa các lần gọi LLM lúc xây KG |
+- Chất lượng KG phụ thuộc vào bước trích bộ ba của LLM. Tên quan hệ sinh tự do nên có thể lệch ("sinh_tại" và "sinh_ra_tại"); prompt chỉ gợi ý bộ từ vựng chứ không ép.
+- Gộp thực thể là heuristic theo tên: hai thực thể khác nhau, cùng loại, tên lồng nhau (như "Google" và "Google DeepMind") vẫn có thể bị gộp. Tắt bằng `ALIAS_MERGE=false`.
+- Mỗi lần index kèm đổi tài liệu, đồ thị được dựng lại từ cache; chưa cập nhật tăng dần từng đỉnh.
+- Chunking theo ký tự, không theo token; chưa có reranking, hybrid search (BM25) hay lịch sử hội thoại.
+- Lớp gọi Gemini thật (`providers/gemini.py`) chưa có test tự động; test dùng provider giả.
 
-## Test
+## Hướng phát triển
 
-```bash
-python -m pytest -q
-```
-
-`FakeLLM` thay Gemini nên không cần key. Phủ: chunking, gộp thực thể, lưu/đọc đồ thị, truy hồi vector, truy hồi nhiều bước trên đồ thị, bật/tắt đoạn văn gốc. Phần gọi Gemini thật (`src/llm.py`) chưa được kiểm thử tự động.
-
-## Hạn chế và hướng phát triển
-
-- Xây KG tốn một lần gọi LLM cho mỗi đoạn, nên chậm và tốn quota với kho tài liệu lớn.
-- Gộp thực thể chỉ dựa trên tên chuẩn hóa; "Einstein" và "Albert Einstein" có thể thành hai đỉnh nếu LLM viết không nhất quán (prompt đã yêu cầu dùng tên đầy đủ).
-- Chất lượng KG phụ thuộc hoàn toàn vào bước trích bộ ba của LLM.
-- Mở rộng: Neo4j + Cypher, hybrid search (BM25 + vector) và reranking, phát hiện cộng đồng + tóm tắt kiểu Microsoft GraphRAG, đánh giá tự động (RAGAS).
+Lưu đồ thị trong Neo4j và truy vấn bằng Cypher; hybrid search + reranking cho vector RAG; phát hiện cộng đồng và tóm tắt kiểu GraphRAG của Microsoft cho câu hỏi tổng quan; mở rộng bộ đánh giá và dùng LLM làm giám khảo.
